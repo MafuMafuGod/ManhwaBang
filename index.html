@@ -134,6 +134,15 @@ footer.fine{margin-top:56px;padding-top:14px;border-top:2px dotted var(--rule);f
   .side{grid-column:1/-1}
   .side{flex-direction:row;align-items:center;justify-content:space-between}
 }
+dialog.auth{border:3px solid var(--ink);background:var(--paper);color:var(--ink);padding:24px 22px 18px;width:min(92vw,400px);box-shadow:6px 6px 0 var(--pink)}
+dialog.auth::backdrop{background:rgba(20,26,60,.55)}
+dialog.auth h2{margin-bottom:6px}
+dialog.auth .aux{margin:10px 0 0;font-size:.9rem;color:var(--muted)}
+dialog.auth label{display:block;font-weight:700;font-size:.92rem;margin-top:14px}
+dialog.auth input{display:block;width:100%;margin-top:4px;border:2px solid var(--ink);background:var(--paper);padding:9px 12px;border-radius:0}
+dialog.auth .msg{min-height:1.3em;margin:12px 0 0;font-size:.9rem}
+dialog.auth .msg.bad{color:var(--pink);font-weight:700}
+.who{font-weight:700;color:var(--ink)}
 </style>
 </head>
 <body>
@@ -142,6 +151,9 @@ footer.fine{margin-top:56px;padding-top:14px;border-top:2px dotted var(--rule);f
     <h1 class="brand"><small>만화방</small>Manhwabang</h1>
     <p>Pull a random manhwa, then keep your place in everything you're reading.</p>
     <div class="sync"><span id="sync" aria-live="polite">Your shelf is saved in this browser.</span>
+      <button class="link" id="signin" type="button" hidden>Sign in to save it to an account</button>
+      <span class="who" id="who" hidden></span>
+      <button class="link" id="signout" type="button" hidden>Sign out</button>
       <button class="link" id="exp" type="button">Back up shelf</button>
       <button class="link" id="imp" type="button">Restore</button>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
@@ -169,7 +181,25 @@ footer.fine{margin-top:56px;padding-top:14px;border-top:2px dotted var(--rule);f
   <footer class="fine">Not affiliated with any publisher or platform. All titles and cover art belong to their creators and publishers; covers are shown only to help you recognise a series. Cover images and details come from <a class="link" href="https://myanimelist.net" target="_blank" rel="noopener">MyAnimeList</a> through the unofficial <a class="link" href="https://jikan.moe" target="_blank" rel="noopener">Jikan API</a>, with <a class="link" href="https://kitsu.app" target="_blank" rel="noopener">Kitsu</a> as a backup.</footer>
 </div>
 
+<dialog class="auth" id="auth" aria-labelledby="authh">
+  <form id="authform" novalidate>
+    <h2 id="authh">Sign in</h2>
+    <p class="aux" id="authsub">Your shelf follows you to any device you sign in on.</p>
+    <label id="eml">Email<input type="email" id="em" autocomplete="email" maxlength="200"></label>
+    <label id="pwl">Password<input type="password" id="pw" autocomplete="current-password" minlength="8" maxlength="72"></label>
+    <p class="msg" id="authmsg" role="alert"></p>
+    <div class="actions"><button class="btn" id="authgo" type="submit">Sign in</button><button class="btn ghost" type="button" id="authclose">Cancel</button></div>
+    <p class="aux" id="modewrap"><button class="link" type="button" id="mode">New here? Create an account</button></p>
+    <p class="aux" id="forgotwrap"><button class="link" type="button" id="forgot">Forgot your password?</button></p>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
 <script>
+/* ---------- accounts: paste your Supabase project values here ---------- */
+const SUPABASE_URL = "https://oukgjisnzuxjqlxioais.supabase.co";        // e.g. https://abcdefgh.supabase.co
+const SUPABASE_KEY = "sb_publishable_8SEQMWrLi7hf95Z6etjodQ_Repkf9gO";    // starts with sb_publishable_
+
 const G = ["Action","Fantasy","Martial arts","Romance","Drama","Comedy","School","Horror","Thriller","Sports","Slice of life"];
 const CATALOG = [
  ["Solo Leveling",["Action","Fantasy"],"The weakest hunter alive gets a system only he can see, and starts levelling past everyone who looked down on him."],
@@ -248,6 +278,7 @@ let tab="reading", selected=new Set(), current=null, recent=[], fromShelf=false;
 function commit(){
   lib.updated=Date.now();
   try{localStorage.setItem(LS,JSON.stringify(lib))}catch(e){}
+  queueCloud();
   renderShelf(); renderPull(false);
 }
 function addItem(entry,status){
@@ -259,9 +290,134 @@ function addItem(entry,status){
 
 function saveLocalOnly(){try{localStorage.setItem(LS,JSON.stringify(lib))}catch(e){}}
 
+/* ---------- accounts (Supabase) ---------- */
+const sb=(window.supabase&&/^https:\/\//.test(SUPABASE_URL)&&!SUPABASE_KEY.startsWith("PASTE"))
+  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY) : null;
+let user=null, cloudTimer=null, cloudBusy=false, cloudAgain=false, lastPull=0;
+const $=id=>document.getElementById(id);
+function setStatus(t){ $("sync").textContent=t; }
+function showAccount(){
+  $("signin").hidden=!sb||!!user;
+  $("who").hidden=!user; $("signout").hidden=!user;
+  if(user) $("who").textContent=user.email||"Signed in";
+}
+function mergeItems(a,b){
+  const out=Object.assign({},a);
+  for(const [id,v] of Object.entries(b||{})){ if(!out[id]||(v.upd||0)>(out[id].upd||0)) out[id]=v; }
+  return out;
+}
+function queueCloud(){
+  if(!user) return;
+  lib.dirty=true; saveLocalOnly();
+  clearTimeout(cloudTimer); cloudTimer=setTimeout(pushCloud,800);
+  setStatus("Saving…");
+}
+async function pushCloud(){
+  cloudTimer=null; if(!user) return;
+  if(cloudBusy){ cloudAgain=true; return; }
+  cloudBusy=true;
+  const { error }=await sb.from("shelves").upsert({ user_id:user.id, data:{items:lib.items} });
+  cloudBusy=false;
+  if(error){ setStatus("Couldn't reach your account. Changes are kept in this browser and will sync later."); }
+  else { lib.dirty=false; saveLocalOnly(); lastPull=Date.now(); setStatus("Saved to your account"); }
+  if(cloudAgain){ cloudAgain=false; pushCloud(); }
+}
+async function attach(u){
+  user=u; showAccount(); setStatus("Loading your shelf…");
+  const { data, error }=await sb.from("shelves").select("data").eq("user_id",u.id).maybeSingle();
+  if(error){ setStatus("Couldn't load your account shelf. Showing the copy in this browser."); return; }
+  const cloud=(data&&data.data&&data.data.items)||{};
+  let items;
+  if(lib.owner===u.id) items=lib.dirty?mergeItems(cloud,lib.items):cloud;      // this browser already belongs to you
+  else if(!lib.owner) items=mergeItems(cloud,lib.items);                        // a guest shelf joins your account
+  else items=cloud;                                                             // someone else's copy: don't mix
+  const changed=JSON.stringify(items)!==JSON.stringify(cloud);
+  lib={items, owner:u.id, updated:Date.now(), dirty:changed};
+  saveLocalOnly(); renderShelf(); renderPull(false); lastPull=Date.now();
+  if(changed) pushCloud(); else setStatus("Saved to your account");
+}
+async function refreshFromCloud(){
+  if(!user||lib.dirty||cloudBusy||cloudTimer||Date.now()-lastPull<30000) return;
+  lastPull=Date.now();
+  const { data, error }=await sb.from("shelves").select("data").eq("user_id",user.id).maybeSingle();
+  if(error||!data||lib.dirty||cloudTimer) return;
+  const cloud=(data.data&&data.data.items)||{};
+  if(JSON.stringify(cloud)!==JSON.stringify(lib.items)){ lib.items=cloud; saveLocalOnly(); renderShelf(); renderPull(false); }
+}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") refreshFromCloud(); });
+window.addEventListener("online",()=>{ if(user&&lib.dirty) pushCloud(); });
+
+/* sign-in dialog */
+let mode="signin";
+const MODES={
+  signin:{h:"Sign in",sub:"Your shelf follows you to any device you sign in on.",go:"Sign in",email:true,pw:true,swap:"New here? Create an account",forgot:true,ac:"current-password"},
+  signup:{h:"Create an account",sub:"Anything already on your shelf in this browser moves into your new account.",go:"Create account",email:true,pw:true,swap:"Already have an account? Sign in",forgot:false,ac:"new-password"},
+  reset:{h:"Reset your password",sub:"We'll email you a link to set a new password.",go:"Send reset link",email:true,pw:false,swap:"Back to sign in",forgot:false},
+  newpw:{h:"Set a new password",sub:"Choose a new password for your account.",go:"Save password",email:false,pw:true,swap:"",forgot:false,ac:"new-password"}
+};
+function setMode(m,msg){
+  mode=m; const c=MODES[m];
+  $("authh").textContent=c.h; $("authsub").textContent=c.sub; $("authgo").textContent=c.go;
+  $("eml").hidden=!c.email; $("pwl").hidden=!c.pw; $("pw").autocomplete=c.ac||"current-password";
+  $("modewrap").hidden=!c.swap; $("mode").textContent=c.swap; $("forgotwrap").hidden=!c.forgot;
+  say(msg||"");
+}
+function say(t,bad){ const m=$("authmsg"); m.textContent=t; m.className="msg"+(bad?" bad":""); }
+function openAuth(m){ setMode(m); $("auth").showModal(); (MODES[m].email?$("em"):$("pw")).focus(); }
+function friendly(e){
+  const t=(e&&e.message)||"Something went wrong. Try again.";
+  if(/rate limit/i.test(t)) return "Too many attempts or emails in a short time. Wait a while and try again.";
+  if(/Invalid login credentials/i.test(t)) return "That email and password don't match an account.";
+  if(/already registered/i.test(t)) return "There's already an account with that email. Sign in instead.";
+  if(/Failed to fetch|NetworkError/i.test(t)) return "Couldn't reach the account service. Check your connection and try again.";
+  return t;
+}
+$("signin").onclick=()=>openAuth("signin");
+$("authclose").onclick=()=>$("auth").close();
+$("mode").onclick=()=>setMode(mode==="signin"?"signup":"signin");
+$("forgot").onclick=()=>setMode("reset");
+$("authform").addEventListener("submit",async e=>{
+  e.preventDefault(); if(!sb) return;
+  const email=$("em").value.trim(), password=$("pw").value;
+  const c=MODES[mode];
+  if(c.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ say("Enter a valid email address.",true); $("em").focus(); return; }
+  if(c.pw&&password.length<8){ say("Use a password with at least 8 characters.",true); $("pw").focus(); return; }
+  const go=$("authgo"); go.disabled=true; say("Working…");
+  const here=location.origin+location.pathname;
+  let r;
+  try{
+    if(mode==="signin") r=await sb.auth.signInWithPassword({email,password});
+    else if(mode==="signup") r=await sb.auth.signUp({email,password,options:{emailRedirectTo:here}});
+    else if(mode==="reset") r=await sb.auth.resetPasswordForEmail(email,{redirectTo:here});
+    else r=await sb.auth.updateUser({password});
+  }catch(err){ r={error:err}; }
+  go.disabled=false;
+  if(r.error){ say(friendly(r.error),true); return; }
+  $("pw").value="";
+  if(mode==="signup"&&!(r.data&&r.data.session)){ setMode("signin","Check your email and click the confirmation link, then sign in here."); return; }
+  if(mode==="reset"){ say("If that email has an account, a reset link is on its way."); return; }
+  if(mode==="newpw"){ setMode("signin"); $("auth").close(); setStatus("Password updated"); return; }
+  $("auth").close();
+});
+$("signout").onclick=async()=>{
+  if(lib.dirty&&user){ clearTimeout(cloudTimer); await pushCloud(); }
+  if(sb) await sb.auth.signOut();
+  user=null; lib={items:{},updated:0}; saveLocalOnly(); showAccount();
+  renderShelf(); pull(); setStatus("Signed out. Your shelf is safe in your account.");
+};
+if(sb){
+  sb.auth.onAuthStateChange((event,session)=>{
+    const u=session&&session.user;
+    if(event==="PASSWORD_RECOVERY"){ setTimeout(()=>openAuth("newpw"),0); }
+    if(u&&(!user||user.id!==u.id)) setTimeout(()=>attach(u),0);   // run outside the auth callback
+    if(!u&&user&&event==="SIGNED_OUT"){ user=null; showAccount(); }
+  });
+}
+showAccount();
+
 /* ---------- backup: export / import ---------- */
 document.getElementById("exp").onclick=()=>{
-  const blob=new Blob([JSON.stringify(lib,null,2)],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({items:lib.items},null,2)],{type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download="manhwabang-shelf-"+new Date().toISOString().slice(0,10)+".json";
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
@@ -273,7 +429,7 @@ document.getElementById("impf").onchange=async e=>{
     const d=JSON.parse(await f.text());
     if(!d||typeof d.items!=="object") throw 0;
     for(const [id,v] of Object.entries(d.items)){ if(!v||typeof v.t!=="string"||!STATUS.some(s=>s[0]===v.status)) throw 0; }
-    lib={items:d.items,updated:Date.now()}; commit(); msg.textContent="Shelf restored from backup";
+    lib={items:d.items,updated:Date.now(),owner:lib.owner}; commit(); msg.textContent="Shelf restored from backup";
   }catch(err){ msg.textContent="That file isn't a Manhwabang backup. Choose a .json file saved with Back up shelf."; }
   e.target.value="";
 };
@@ -497,7 +653,7 @@ listEl.addEventListener("change",e=>{
     if(u&&!okUrl(u)){ const box=t.parentElement; if(!box.querySelector(".err")) box.insertAdjacentHTML("beforeend",'<p class="err">Paste a full image link that starts with https://</p>'); return; }
     if(u) v.cover=u; else delete v.cover; v.upd=Date.now(); commit(); return;
   }
-  if(t.dataset.a==="note"){ v.note=t.value.slice(0,2000); v.upd=Date.now(); lib.updated=Date.now(); saveLocalOnly(); }
+  if(t.dataset.a==="note"){ v.note=t.value.slice(0,2000); v.upd=Date.now(); lib.updated=Date.now(); saveLocalOnly(); queueCloud(); }
 });
 function focusBack(id,a,n){const row=listEl.querySelector(`.row[data-id="${CSS.escape(id)}"]`); if(!row) return;
   const el=n?row.querySelector(`[data-a="${a}"][data-n="${n}"]`):row.querySelector(`[data-a="${a}"]`); if(el) el.focus();}
