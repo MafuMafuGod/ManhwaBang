@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manhwabang: random manhwa picks and a reading tracker</title>
+<meta name="description" content="Pull a random manhwa by genre and keep track of the chapters you're reading.">
+<meta name="theme-color" content="#EEF0E8">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%2325336F'/><text x='50' y='74' font-size='72' text-anchor='middle' fill='%23FF4FA3' font-family='Arial Black,sans-serif'>M</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gothic+A1:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EEF0E8; --ink:#25336F; --pink:#FF4FA3; --lay2:#25336F; --yellow:#FFE14D;
+  --rule:#B7BEDA; --soft:#E1E4EE; --muted:#56608F; --blend:multiply;
+  --display:"Black Han Sans","Arial Black","Helvetica Neue",Impact,sans-serif;
+  --body:"Gothic A1","Apple SD Gothic Neo","Segoe UI",system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#131937; --ink:#E6E9F5; --pink:#FF5FAE; --lay2:#6F86FF; --yellow:#E9CB3B;
+    --rule:#3A4272; --soft:#1C2449; --muted:#A3AAD0; --blend:screen;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#131937; --ink:#E6E9F5; --pink:#FF5FAE; --lay2:#6F86FF; --yellow:#E9CB3B;
+  --rule:#3A4272; --soft:#1C2449; --muted:#A3AAD0; --blend:screen;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--paper); color:var(--ink); font-family:var(--body);
+  font-size:16px; line-height:1.55;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .6  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--pink);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 64px}
+
+/* masthead */
+header.mast{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 22px;margin-bottom:28px}
+.brand{font-family:var(--display);font-size:clamp(2.2rem,6vw,3.4rem);line-height:.9;margin:0;font-weight:400;letter-spacing:-.01em}
+.brand small{display:block;font-size:.42em;color:var(--pink);letter-spacing:.02em;margin-bottom:4px}
+.mast p{margin:0 0 4px;max-width:44ch;color:var(--muted)}
+.sync{margin-left:auto;font-size:.85rem;color:var(--muted);padding-bottom:4px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline}
+.sync .link{font-size:.85rem;color:var(--muted)}
+
+.grid{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:40px;align-items:start}
+@media (max-width:880px){.grid{grid-template-columns:1fr;gap:48px}}
+
+h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1.1;margin:0 0 14px}
+
+/* genre chips */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.chip{border:2px solid var(--ink);background:transparent;border-radius:999px;padding:3px 12px;font-size:.88rem;cursor:pointer;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.opt{display:flex;align-items:center;gap:8px;font-size:.92rem;margin:4px 0 18px;cursor:pointer}
+.opt input{accent-color:var(--pink);width:18px;height:18px}
+
+/* the pull: a webtoon panel */
+.strip{border:3px solid var(--ink);background:var(--paper)}
+.cover{display:block;width:100%;aspect-ratio:3/4;border-bottom:3px solid var(--ink);background:var(--soft)}
+.cover svg{display:block;width:100%;height:100%}
+.pbody{padding:16px 18px 20px}
+.over{position:relative;display:grid;font-family:var(--display);font-size:clamp(1.9rem,5vw,2.5rem);line-height:1.02;margin:0 0 10px;font-weight:400}
+.over span{grid-area:1/1;mix-blend-mode:var(--blend)}
+.over .l1{color:var(--pink);transform:translate(3px,2px)}
+.over .l2{color:var(--lay2)}
+.over.pull .l1{animation:reg .55s cubic-bezier(.2,.9,.25,1)}
+@keyframes reg{from{transform:translate(22px,-9px);opacity:.2}to{transform:translate(3px,2px);opacity:1}}
+@media (prefers-reduced-motion:reduce){.over.pull .l1{animation:none}}
+.gen{font-size:.88rem;color:var(--muted);margin:0 0 8px}
+.blurb{margin:0;max-width:52ch}
+.onshelf{margin:10px 0 0;font-size:.9rem;background:var(--yellow);color:#25336F;display:inline-block;padding:1px 8px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.btn{border:2px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:999px;padding:8px 18px;font-weight:700;cursor:pointer;box-shadow:3px 3px 0 var(--pink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--pink)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:none}
+.btn.ghost:active{transform:none;background:var(--soft)}
+.btn:disabled{opacity:.45;cursor:default;transform:none}
+.link{background:none;border:0;padding:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer;color:var(--ink);font-size:.92rem}
+.from{margin-top:14px;font-size:.92rem;color:var(--muted)}
+.empty{padding:28px 18px;font-size:.95rem}
+
+/* shelf */
+.shelfhead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:12px}
+.shelfhead h2{margin:0}
+.stats{color:var(--muted);font-size:.92rem}
+.tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:3px solid var(--ink);margin-bottom:6px}
+.tab{background:none;border:0;padding:8px 14px 6px;cursor:pointer;font-weight:700;font-size:.98rem;color:var(--muted);border-bottom:5px solid transparent;margin-bottom:-3px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--pink)}
+.tab .n{font-weight:500;margin-left:4px}
+.list{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 18px;padding:16px 2px;border-bottom:2px dotted var(--rule)}
+.rt{font-family:var(--display);font-size:1.25rem;line-height:1.15;margin:0}
+.rg{font-size:.84rem;color:var(--muted);margin:2px 0 0}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:10px;font-size:.9rem}
+.step{display:flex;align-items:center;gap:0;border:2px solid var(--ink);border-radius:999px;overflow:hidden}
+.step button{background:none;border:0;width:34px;height:32px;cursor:pointer;font-size:1.15rem;font-weight:700;line-height:1}
+.step button:hover{background:var(--soft)}
+.step input{width:62px;border:0;border-left:2px solid var(--ink);border-right:2px solid var(--ink);text-align:center;height:32px;background:var(--yellow);color:#25336F;font-weight:700;-moz-appearance:textfield;appearance:textfield}
+.step input::-webkit-outer-spin-button,.step input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.chlab{font-size:.84rem;color:var(--muted)}
+select{border:2px solid var(--ink);background:var(--paper);border-radius:999px;padding:4px 10px;cursor:pointer}
+.stars{display:flex;gap:3px}
+.stars button{width:18px;height:18px;border:2px solid var(--ink);background:transparent;cursor:pointer;padding:0;transform:rotate(45deg);margin:3px}
+.stars button.on{background:var(--pink);border-color:var(--pink)}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.rm{font-size:.84rem}
+.rm.arm{color:var(--pink);font-weight:700}
+.when{font-size:.8rem;color:var(--muted);white-space:nowrap}
+details{margin-top:8px;font-size:.9rem}
+summary{cursor:pointer;color:var(--muted)}
+textarea{width:100%;max-width:60ch;min-height:64px;margin-top:6px;border:2px solid var(--rule);background:var(--paper);padding:8px;resize:vertical}
+.none{padding:26px 2px;color:var(--muted);max-width:48ch}
+.add{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}
+.add label{flex-basis:100%;font-weight:700;font-size:.95rem}
+.add input{flex:1 1 220px;border:2px solid var(--ink);background:var(--paper);border-radius:999px;padding:8px 16px}
+@media (max-width:520px){
+  .row{grid-template-columns:1fr}
+  .side{flex-direction:row;align-items:center;justify-content:space-between}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <h1 class="brand"><small>만화방</small>Manhwabang</h1>
+    <p>Pull a random manhwa, then keep your place in everything you're reading.</p>
+    <div class="sync"><span id="sync" aria-live="polite">Your shelf is saved in this browser.</span>
+      <button class="link" id="exp" type="button">Back up shelf</button>
+      <button class="link" id="imp" type="button">Restore</button>
+      <input type="file" id="impf" accept="application/json,.json" hidden></div>
+  </header>
+
+  <div class="grid">
+    <section aria-labelledby="pullh">
+      <h2 id="pullh">Pull a title</h2>
+      <div class="chips" id="chips" role="group" aria-label="Filter by genre"></div>
+      <label class="opt"><input type="checkbox" id="skip" checked> Skip titles already on my shelf</label>
+      <div id="pull" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="shelfh">
+      <div class="shelfhead"><h2 id="shelfh">Your shelf</h2><span class="stats" id="stats"></span></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <ul class="list" id="list"></ul>
+      <form class="add" id="addform" autocomplete="off">
+        <label for="addt">Add a title that isn't in the catalog</label>
+        <input id="addt" placeholder="Title" maxlength="120">
+        <button class="btn ghost" type="submit" id="addbtn">Add to Reading</button>
+      </form>
+    </section>
+  </div>
+</div>
+
+<script>
+const G = ["Action","Fantasy","Martial arts","Romance","Drama","Comedy","School","Horror","Thriller","Sports","Slice of life"];
+const CATALOG = [
+ ["Solo Leveling",["Action","Fantasy"],"The weakest hunter alive gets a system only he can see, and starts levelling past everyone who looked down on him."],
+ ["Tower of God",["Fantasy","Action","Drama"],"A boy enters a tower of lethal tests to follow the one friend he had, and learns every floor has its own politics."],
+ ["The God of High School",["Action","Martial arts"],"A fighting tournament for teenagers slowly turns into a war over borrowed divine power."],
+ ["Omniscient Reader's Viewpoint",["Fantasy","Action"],"The only person who finished an obscure web novel watches it come true, and uses the ending he knows to survive."],
+ ["Lookism",["Drama","School","Action"],"A bullied student wakes up with a second, perfect body, and switches between two lives."],
+ ["Sweet Home",["Horror","Thriller"],"A withdrawn teen and his neighbours barricade a run-down apartment block while people outside turn into monsters."],
+ ["Noblesse",["Action","Fantasy","Comedy"],"An ancient noble wakes from a centuries-long sleep and enrols in a Korean high school."],
+ ["Bastard",["Horror","Thriller"],"A quiet boy hides the fact that his father is a killer, until a new girl at school puts him in an impossible spot."],
+ ["Eleceed",["Action","Comedy"],"A kind teen with lightning speed trains under a legendary fighter who is stuck in the body of a fat cat."],
+ ["Nano Machine",["Martial arts","Action"],"An abused orphan of a demonic cult gets nanomachines from a descendant in the future and fights his way up."],
+ ["Return of the Mount Hua Sect",["Martial arts","Comedy"],"A legendary swordsman wakes a century later in a beggar's body and bullies his ruined old sect back into shape."],
+ ["Wind Breaker",["Sports","School","Drama"],"A top student who rides alone gets pulled into a street-cycling crew."],
+ ["Weak Hero",["Action","School","Drama"],"A slight, silent top student fights bullies with his head and whatever is within reach."],
+ ["True Beauty",["Romance","Comedy","School"],"A girl whose makeup makes her a school star guards her bare face at all costs."],
+ ["Yumi's Cells",["Romance","Slice of life","Comedy"],"An office worker's dating life, as argued over by the tiny cells running her head."],
+ ["Cheese in the Trap",["Romance","Drama","Thriller"],"A university student suspects her flawless senior is far colder than he lets on."],
+ ["Hardcore Leveling Warrior",["Action","Fantasy","Comedy"],"The number one player of a virtual reality game loses everything and restarts at level one."],
+ ["The Breaker",["Martial arts","Action","School"],"A bullied student discovers his new teacher is a martial arts master hiding from his past."],
+ ["Tomb Raider King",["Action","Fantasy"],"Sent back in time, a man races to loot the world's powerful relics before anyone else can claim them."],
+ ["Second Life Ranker",["Action","Fantasy"],"A man climbs a deadly tower using his murdered twin's diary as a map for revenge."],
+ ["Legend of the Northern Blade",["Martial arts","Drama"],"The son of a disgraced sect leader trains alone to restore his father's name."],
+ ["The Boxer",["Sports","Drama","Action"],"A hollow-eyed teenager with a frightening gift for boxing, and the coach who wants to see how far it goes."],
+ ["Mercenary Enrollment",["Action","School"],"A former child soldier comes home to Korea and tries to be a normal high schooler for his family's sake."],
+ ["Kill the Hero",["Action","Fantasy"],"Betrayed and killed by the world's great hero, a man goes back in time to strike first."],
+ ["Villain to Kill",["Action","Fantasy"],"A hero dies and wakes up inside the body of a villain everyone wants dead."],
+ ["Surviving Romance",["Romance","Thriller","Comedy"],"Students trapped inside a romance webtoon have to follow the plot or be erased."],
+ ["Who Made Me a Princess",["Fantasy","Romance","Drama"],"Reborn as a princess fated to be killed by her own father, a girl sets out to win him over first."],
+ ["The Remarried Empress",["Romance","Drama","Fantasy"],"An empress pushed aside by her husband asks for a divorce, and a remarriage, on her own terms."],
+ ["Doctor Elise",["Romance","Fantasy"],"A hated royal gets a second chance at her life, armed with the surgical skills of another one."],
+ ["Under the Oak Tree",["Romance","Fantasy","Drama"],"A timid noblewoman married off to a knight she barely knows builds a life with him far from her family."],
+ ["The Horizon",["Drama","Thriller"],"Two children walk together across a country wrecked by war. Few words, heavy pages."],
+ ["Dice",["Fantasy","School","Drama"],"A bullied student is offered dice that raise his stats, and so is everyone else at school."],
+ ["Study Group",["Action","School","Comedy"],"A boy who only wants to study starts a study group at a school where everyone else would rather fight."],
+ ["Questism",["Action","School"],"A bullied teen starts receiving quests that reward him for standing up for himself."],
+ ["Pick Me Up",["Fantasy","Action"],"A top player of a gacha game gets dragged inside it as a lowly one-star hero."],
+ ["Infinite Mage",["Fantasy"],"A foundling with a rare gift for magic talks his way into an academy built for nobles."],
+ ["The Greatest Estate Developer",["Fantasy","Comedy"],"A civil engineering student wakes up as a lazy, broke noble and fixes his estate with engineering."],
+ ["Trash of the Count's Family",["Fantasy","Comedy"],"A man wakes up as a minor jerk from a novel and just wants a quiet life, which keeps not happening."],
+ ["Duty After School",["Horror","School","Action"],"High schoolers are drafted to fight strange spheres that appear in the sky over Korea."],
+ ["Pigpen",["Horror","Thriller"],"A man wakes on an island with no memory, among strangers who are hiding something."],
+ ["Shotgun Boy",["Horror","Action"],"A bullied boy finds a shotgun on the day the monsters show up."],
+ ["Viral Hit",["Action","School","Comedy"],"A weak student starts streaming his fights and learns fast because views pay."],
+ ["How to Fight",["Action","School"],"A pushover discovers a video channel that pays him to learn to fight, one upload at a time."],
+ ["Get Schooled",["Action","School","Drama"],"A special education inspector cleans up broken schools, with force when needed."],
+ ["SSS-Class Revival Hunter",["Action","Fantasy"],"A hunter whose only skill is coming back from the dead turns that into an advantage."],
+ ["The Beginning After the End",["Fantasy","Action"],"A king is reborn as a baby in a world of magic and gets to grow up properly this time."],
+ ["Doom Breaker",["Fantasy","Action"],"The last hero standing loses the war against the gods, and gets sent back to try again."],
+ ["The Tutorial Is Too Hard",["Fantasy","Action"],"A man picks the hardest tutorial for a world-ending game and gets stuck in it for years."],
+ ["Girls of the Wild's",["Action","Romance","School"],"The only boy at a former girls' school built around fighting has to learn to survive it."],
+ ["A Business Proposal",["Romance","Comedy"],"A woman goes on a blind date in place of her friend, and the man turns out to be her new CEO."],
+ ["Annarasumanara",["Drama","Fantasy","Slice of life"],"A poor high schooler meets a strange magician living in an abandoned amusement park."],
+ ["Along with the Gods",["Drama","Fantasy"],"A tireless afterlife lawyer defends an ordinary office worker through the trials of the dead."],
+ ["Misaeng",["Drama","Slice of life"],"A failed baduk prodigy lands an internship at a trading company with no degree and no connections."],
+ ["Distant Sky",["Horror","Thriller"],"Two teenagers wake up in an empty Seoul where something is hunting in the dark."],
+ ["The Villainess Reverses the Hourglass",["Romance","Fantasy","Drama"],"A villainess executed for her schemes wakes up in the past with an hourglass and a plan for revenge."],
+ ["Death Is the Only Ending for the Villainess",["Romance","Fantasy","Thriller"],"A woman trapped in the hard mode of a dating game plays the villainess, where every wrong answer can kill her."],
+ ["Kubera",["Fantasy","Drama"],"A girl named after a god is dragged into a long war between gods and people."],
+ ["Blade of the Phantom Master",["Fantasy","Action"],"A secret royal inspector wanders a ruined kingdom, dealing out justice nobody asked for."],
+ ["Priest",["Horror","Action"],"A former priest who made a deal with a demon hunts fallen angels across the American West."]
+].map(([t,g,b])=>({id:slug(t),t,g,b}));
+
+function slug(s){return s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")}
+function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+/* ---------- state ---------- */
+const LS="manhwabang-v1";
+let lib={items:{},updated:0};
+try{const s=localStorage.getItem(LS); if(s){const p=JSON.parse(s); if(p&&p.items) lib=p;}}catch(e){}
+const STATUS=[["reading","Reading"],["next","Up next"],["done","Finished"],["dropped","Dropped"]];
+let tab="reading", selected=new Set(), current=null, recent=[], fromShelf=false;
+
+function commit(){
+  lib.updated=Date.now();
+  try{localStorage.setItem(LS,JSON.stringify(lib))}catch(e){}
+  renderShelf(); renderPull(false);
+}
+function addItem(entry,status){
+  const now=Date.now();
+  const ex=lib.items[entry.id];
+  lib.items[entry.id]=Object.assign({t:entry.t,g:entry.g||[],ch:0,rating:0,note:"",added:now},ex||{},{status,upd:now});
+  tab=status; commit();
+}
+
+function saveLocalOnly(){try{localStorage.setItem(LS,JSON.stringify(lib))}catch(e){}}
+
+/* ---------- backup: export / import ---------- */
+document.getElementById("exp").onclick=()=>{
+  const blob=new Blob([JSON.stringify(lib,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="manhwabang-shelf-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+document.getElementById("imp").onclick=()=>document.getElementById("impf").click();
+document.getElementById("impf").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return; const msg=document.getElementById("sync");
+  try{
+    const d=JSON.parse(await f.text());
+    if(!d||typeof d.items!=="object") throw 0;
+    for(const [id,v] of Object.entries(d.items)){ if(!v||typeof v.t!=="string"||!STATUS.some(s=>s[0]===v.status)) throw 0; }
+    lib={items:d.items,updated:Date.now()}; commit(); msg.textContent="Shelf restored from backup";
+  }catch(err){ msg.textContent="That file isn't a Manhwabang backup. Choose a .json file saved with Back up shelf."; }
+  e.target.value="";
+};
+
+/* ---------- cover art: generated, riso two-colour ---------- */
+function cover(entry){
+  const R=rng(hash(entry.t)); const kind=Math.floor(R()*3);
+  const W=300,H=400; let a="",b="";
+  if(kind===0){ // halftone field
+    const cx=R()*W, cy=R()*H, f=.018+R()*.02;
+    for(let y=10;y<H;y+=14)for(let x=(y/14%2)*7+6;x<W;x+=14){
+      const d=Math.hypot(x-cx,y-cy); const r=Math.max(0,(Math.sin(d*f)+1)*3.4-.6);
+      if(r>.4) a+=`<circle cx="${x}" cy="${y}" r="${r.toFixed(1)}"/>`;
+    }
+    const bx=R()*W; for(let i=0;i<7;i++){const y=40+i*50+R()*20; b+=`<rect x="${(bx*.3).toFixed(0)}" y="${y.toFixed(0)}" width="${(120+R()*160).toFixed(0)}" height="${(6+R()*18).toFixed(0)}"/>`}
+  } else if(kind===1){ // speed lines
+    const cx=W*(.3+R()*.4), cy=H*(.3+R()*.4);
+    for(let i=0;i<46;i++){const an=i/46*Math.PI*2+R()*.05, w=.02+R()*.03, L=500;
+      a+=`<polygon points="${cx},${cy} ${(cx+Math.cos(an)*L).toFixed(0)},${(cy+Math.sin(an)*L).toFixed(0)} ${(cx+Math.cos(an+w)*L).toFixed(0)},${(cy+Math.sin(an+w)*L).toFixed(0)}"/>`;}
+    b+=`<circle cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${(40+R()*50).toFixed(0)}"/>`;
+  } else { // stacked panels
+    let y=0; while(y<H){const h=40+R()*90; const inset=R()*40;
+      a+=`<rect x="${(10+inset).toFixed(0)}" y="${(y+6).toFixed(0)}" width="${(W-20-inset*2).toFixed(0)}" height="${Math.max(0,h-12).toFixed(0)}" fill="none" stroke-width="${(3+R()*6).toFixed(0)}"/>`;
+      if(R()>.5) b+=`<rect x="${(30+R()*100).toFixed(0)}" y="${(y+14).toFixed(0)}" width="${(60+R()*120).toFixed(0)}" height="${Math.max(0,h-28).toFixed(0)}"/>`;
+      y+=h;}
+  }
+  const ch=esc(entry.t.replace(/^the\s+/i,"").charAt(0).toUpperCase());
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Generated cover pattern for ${esc(entry.t)}">
+    <g fill="var(--lay2)" stroke="var(--lay2)" style="mix-blend-mode:var(--blend)" opacity=".85">${b}</g>
+    <g fill="var(--pink)" stroke="var(--pink)" style="mix-blend-mode:var(--blend)">${a}</g>
+    <text x="${W-18}" y="${H-18}" text-anchor="end" font-family="Black Han Sans, Arial Black, sans-serif" font-size="150" fill="var(--lay2)" style="mix-blend-mode:var(--blend)">${ch}</text>
+  </svg>`;
+}
+
+/* ---------- pull ---------- */
+const chipsEl=document.getElementById("chips");
+chipsEl.innerHTML=G.map(g=>`<button class="chip" type="button" aria-pressed="false" data-g="${esc(g)}">${esc(g)}</button>`).join("");
+chipsEl.addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const g=b.dataset.g;
+  selected.has(g)?selected.delete(g):selected.add(g); b.setAttribute("aria-pressed",selected.has(g)); pull();});
+document.getElementById("skip").addEventListener("change",()=>pull());
+
+function pool(){
+  const skip=document.getElementById("skip").checked;
+  if(fromShelf) return Object.entries(lib.items).filter(([,v])=>v.status==="next").map(([id,v])=>({id,t:v.t,g:v.g||[],b:(CATALOG.find(c=>c.id===id)||{}).b||v.note||""}));
+  return CATALOG.filter(c=>(!selected.size||c.g.some(g=>selected.has(g)))&&(!skip||!lib.items[c.id]));
+}
+function pull(){
+  const p=pool();
+  if(!p.length){current=null;renderPull(true);return}
+  let choices=p.filter(c=>!recent.includes(c.id)); if(!choices.length) choices=p;
+  current=choices[Math.floor(Math.random()*choices.length)];
+  recent.push(current.id); if(recent.length>Math.min(8,p.length-1)) recent.shift();
+  renderPull(true);
+}
+function renderPull(animate){
+  const el=document.getElementById("pull");
+  if(!current){
+    el.innerHTML = fromShelf
+      ? `<div class="strip empty">Your Up next list is empty. Save a few titles for later, then pull from them here.<div class="from"><button class="link" id="src">Pull from the full catalog</button></div></div>`
+      : `<div class="strip empty">Nothing left that matches ${selected.size?"these genres":"your filters"}. Turn off a genre, or untick "Skip titles already on my shelf".</div>`;
+    bindSrc(); return;
+  }
+  const on=lib.items[current.id];
+  const lbl=on?STATUS.find(s=>s[0]===on.status)[1]:"";
+  el.innerHTML=`<article class="strip">
+    <div class="cover">${cover(current)}</div>
+    <div class="pbody">
+      <h3 class="over${animate?" pull":""}" aria-label="${esc(current.t)}"><span class="l1" aria-hidden="true">${esc(current.t)}</span><span class="l2" aria-hidden="true">${esc(current.t)}</span></h3>
+      <p class="gen">${esc((current.g||[]).join(", "))}</p>
+      ${current.b?`<p class="blurb">${esc(current.b)}</p>`:""}
+      ${on?`<p class="onshelf">On your shelf: ${esc(lbl)}${on.status==="reading"?`, chapter ${on.ch}`:""}</p>`:""}
+      <div class="actions">
+        ${on&&on.status==="reading"?"":`<button class="btn" id="start">Start reading</button>`}
+        ${on?"":`<button class="btn ghost" id="later">Save for later</button>`}
+        <button class="btn ghost" id="again">Pull another</button>
+      </div>
+      <div class="from">${fromShelf?`Pulling from your Up next list. <button class="link" id="src">Use the full catalog</button>`:`Can't decide what's next? <button class="link" id="src">Pull from my Up next list</button>`}</div>
+    </div></article>`;
+  const s=document.getElementById("start"); if(s) s.onclick=()=>{addItem(current,"reading")};
+  const l=document.getElementById("later"); if(l) l.onclick=()=>{addItem(current,"next")};
+  document.getElementById("again").onclick=pull;
+  bindSrc();
+}
+function bindSrc(){const s=document.getElementById("src"); if(s) s.onclick=()=>{fromShelf=!fromShelf; recent=[]; pull();}}
+
+/* ---------- shelf ---------- */
+const tabsEl=document.getElementById("tabs"), listEl=document.getElementById("list");
+function ago(t){const d=(Date.now()-t)/864e5; if(d<1)return"today"; if(d<2)return"yesterday"; if(d<30)return Math.floor(d)+" days ago"; return new Date(t).toLocaleDateString(undefined,{day:"numeric",month:"short"})}
+function renderShelf(){
+  const items=Object.entries(lib.items);
+  const count=k=>items.filter(([,v])=>v.status===k).length;
+  const chapters=items.reduce((n,[,v])=>n+(+v.ch||0),0);
+  document.getElementById("stats").textContent=items.length?`${items.length} title${items.length>1?"s":""}, ${chapters} chapter${chapters===1?"":"s"} logged`:"";
+  tabsEl.innerHTML=STATUS.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${k===tab}" data-k="${k}">${l}<span class="n">${count(k)}</span></button>`).join("");
+  document.getElementById("addbtn").textContent="Add to "+STATUS.find(s=>s[0]===tab)[1];
+  const rows=items.filter(([,v])=>v.status===tab).sort((a,b)=>(b[1].upd||0)-(a[1].upd||0));
+  if(!rows.length){
+    const msg={reading:"Nothing in progress. Pull a title on the left and press Start reading.",next:"Titles you save for later land here.",done:"Mark something as Finished and it moves here.",dropped:"Titles you give up on go here, so you don't get them recommended again."}[tab];
+    listEl.innerHTML=`<li class="none">${msg}</li>`; return;
+  }
+  listEl.innerHTML=rows.map(([id,v])=>`<li class="row" data-id="${esc(id)}">
+    <div>
+      <p class="rt">${esc(v.t)}</p>
+      ${v.g&&v.g.length?`<p class="rg">${esc(v.g.join(", "))}</p>`:""}
+      <div class="meta">
+        <span class="chlab" id="cl-${esc(id)}">Chapter</span>
+        <div class="step"><button type="button" data-a="dec" aria-label="One chapter back">−</button><input type="number" min="0" inputmode="numeric" value="${+v.ch||0}" data-a="ch" aria-labelledby="cl-${esc(id)}"><button type="button" data-a="inc" aria-label="Read one more chapter">+</button></div>
+        <select data-a="st" aria-label="Status">${STATUS.map(([k,l])=>`<option value="${k}"${k===v.status?" selected":""}>${l}</option>`).join("")}</select>
+        <div class="stars" role="group" aria-label="Rating">${[1,2,3,4,5].map(n=>`<button type="button" data-a="rate" data-n="${n}" class="${n<=(v.rating||0)?"on":""}" aria-label="Rate ${n} of 5" aria-pressed="${n<=(v.rating||0)}"></button>`).join("")}</div>
+      </div>
+      <details${v.note?" open":""}><summary>Note</summary><textarea data-a="note" placeholder="Where you left off, what you thought, anything">${esc(v.note||"")}</textarea></details>
+    </div>
+    <div class="side"><span class="when">Updated ${ago(v.upd||v.added||Date.now())}</span><button class="link rm" data-a="rm">Remove</button></div>
+  </li>`).join("");
+}
+tabsEl.addEventListener("click",e=>{const b=e.target.closest(".tab");if(!b)return;tab=b.dataset.k;renderShelf()});
+listEl.addEventListener("click",e=>{
+  const b=e.target.closest("[data-a]"); if(!b) return; const row=b.closest(".row"); const id=row.dataset.id; const v=lib.items[id]; if(!v) return;
+  const a=b.dataset.a;
+  if(a==="inc"||a==="dec"){ v.ch=Math.max(0,(+v.ch||0)+(a==="inc"?1:-1)); if(v.status==="next"&&a==="inc") v.status="reading"; v.upd=Date.now(); commit(); focusBack(id,a); }
+  else if(a==="rate"){ const n=+b.dataset.n; v.rating=v.rating===n?0:n; v.upd=Date.now(); commit(); focusBack(id,a,n); }
+  else if(a==="rm"){
+    if(!b.classList.contains("arm")){ b.classList.add("arm"); b.textContent="Press again to remove"; setTimeout(()=>{if(b.isConnected){b.classList.remove("arm");b.textContent="Remove"}},3500); return; }
+    delete lib.items[id]; commit();
+  }
+});
+listEl.addEventListener("change",e=>{
+  const t=e.target; const row=t.closest(".row"); if(!row) return; const v=lib.items[row.dataset.id]; if(!v) return;
+  if(t.dataset.a==="ch"){ v.ch=Math.max(0,Math.floor(+t.value||0)); v.upd=Date.now(); commit(); }
+  if(t.dataset.a==="st"){ v.status=t.value; v.upd=Date.now(); commit(); }
+  if(t.dataset.a==="note"){ v.note=t.value.slice(0,2000); v.upd=Date.now(); lib.updated=Date.now(); saveLocalOnly(); }
+});
+function focusBack(id,a,n){const row=listEl.querySelector(`.row[data-id="${CSS.escape(id)}"]`); if(!row) return;
+  const el=n?row.querySelector(`[data-a="${a}"][data-n="${n}"]`):row.querySelector(`[data-a="${a}"]`); if(el) el.focus();}
+document.getElementById("addform").addEventListener("submit",e=>{
+  e.preventDefault(); const inp=document.getElementById("addt"); const t=inp.value.trim(); if(!t) return;
+  const id=slug(t)||("t"+Date.now()); const cat=CATALOG.find(c=>c.id===id);
+  addItem(cat||{id,t,g:[]},tab); inp.value="";
+});
+
+renderShelf(); pull();
+</script>
+</body>
+</html>
